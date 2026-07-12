@@ -1,9 +1,5 @@
 // Minimal GraphQL client + renderer. No framework, no build step.
-//
-// To complete Part 3, you will need to:
-//   1. Add the new field you chose to the `QUERY` below.
-//   2. Render it inside renderUser / renderTask.
-
+// Part 3 field chosen: dueDate — requested in QUERY and rendered in renderTask.
 
 const ENDPOINT = "http://localhost:8080/graphql";
 
