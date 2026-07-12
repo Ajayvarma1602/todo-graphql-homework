@@ -1,78 +1,95 @@
 # NOTES
 
-## UI
+## The UI
 
 ![Todo board UI](docs/ui.png)
 
-Three user columns with per-task status badges, tag chips, `dueDate` chips, and
-overdue highlighting (Ada's `due 2026-07-01` in red). Status filter top-left;
-GraphQL endpoint in the footer.
+Each user gets a column with their tasks. Every task shows its status, its tags,
+and its due date. Overdue tasks are highlighted in red (see Ada's first task).
+The dropdown at the top filters tasks by status, and the GraphQL endpoint is
+shown in the footer.
 
 ## 1. The bug
 
-`go run ./cmd/seed` failed with `syntax error at or near "\" (SQLSTATE 42601)` on
-Ada's first task — so users had inserted fine and the tasks `INSERT` was the
-suspect. Grepping for backticks showed every query is a Go raw string except that
-one: a double-quoted string with MySQL-style backticks around the column names,
-which Postgres rejects. It hides well because backticks are all over the file
-legitimately as raw-string delimiters.
+Running `go run ./cmd/seed` failed with this error:
 
-**Fix:** raw string, unquoted column names. Re-runs were already safe
-(`TRUNCATE ... RESTART IDENTITY` before insert).
-
-## 2. Library / structure
-
-`graphql-go/graphql`: schema in Go code, no codegen, no extra dependencies —
-right size for this schema.
-
-Layout:
-- `internal/store` — all SQL, plain structs, `ErrNotFound`
-- `internal/gql` — schema, resolvers, HTTP handler, timing extension
-- `cmd/server` — wiring
-
-Enum casing, ID string↔int64, and date formatting all translate at the gql
-boundary. Tags load in one `IN (...)` query, not per task. Missing id on a query
-→ `null`; missing id on a mutation → error; bad input errors before hitting the
-DB.
-
-All four nice-to-haves are in: slog JSON logs with request timing, resolver
-timing behind `LOG_LEVEL=debug`, Dockerfile + extended compose
-(postgres → seed → api), store integration tests.
-
-## 3. New field
-
-`dueDate` — it's nullable, so it proves a NULL survives DB → API → UI (chip
-renders only when a date exists). Small extras: a status filter using the
-`tasks(status:)` argument, and overdue highlighting.
-
-## 4. Tradeoffs
-
-- `Task.user` is still N+1 (a dataloader would fix it)
-- no pagination
-- `dueDate` is a `String`, not a `Date` scalar
-- tests cover the store only
-- CORS is `*`
-- no delete mutation
-
-## 5. How to run
-
-```bash
-docker compose up --build          # postgres → seed → API on :8080
+```
+syntax error at or near "\" (SQLSTATE 42601)
 ```
 
-or locally:
+The users were inserted fine, so the problem was in the query that inserts
+tasks. That one query used backticks around the column names (MySQL style),
+which Postgres does not accept. It was easy to miss because backticks appear all
+over the file for a normal reason — Go uses them to write multi-line strings.
+
+**Fix:** rewrite that one query the same way as the others (a normal Go
+multi-line string, no backticks around column names). Re-running seed was
+already safe because it clears the tables first.
+
+## 2. Library and project layout
+
+I used `graphql-go/graphql`. It lets me define the schema directly in Go with no
+code generation and no extra tooling — a good fit for a schema this size.
+
+The code is split into three parts:
+
+- `internal/store` — all the database code (SQL queries and the data types)
+- `internal/gql` — the GraphQL schema, the resolvers, and the HTTP handler
+- `cmd/server` — starts everything up
+
+A few things worth pointing out:
+
+- All tags are loaded in **one** query instead of one query per task.
+- Asking for a user that doesn't exist returns `null`; trying to create a task
+  for a user that doesn't exist returns a clear error. Bad input is rejected
+  before it ever reaches the database.
+- All four "nice to have" items are done: JSON logs, per-resolver timing
+  (turn on with `LOG_LEVEL=debug`), a Dockerfile with an extended
+  docker-compose, and tests for the database layer.
+
+## 3. The field I added
+
+I added **`dueDate`**. I picked it because it can be empty, which is a good test:
+it proves an empty value travels correctly from the database, through the API,
+and into the UI (the due-date chip only appears when a task actually has a date).
+
+I also added two small extras: filtering tasks by status, and highlighting
+overdue tasks in red.
+
+## 4. Things I left out (and why)
+
+- Loading each task's user still runs one query per task. A "dataloader" would
+  batch these, but it wasn't needed at this scale.
+- `dueDate` is sent as plain text rather than a dedicated date type.
+- Tests cover the database layer only.
+- There's no delete-task mutation.
+
+## 5. How to run it
+
+Everything in Docker (easiest):
 
 ```bash
-docker compose up -d postgres
-go run ./cmd/seed
-go run ./cmd/server                # http://localhost:8080/ (UI, /graphql, /healthz)
+docker compose up --build          # starts Postgres, seeds it, then the API on :8080
 ```
 
-Tests: `go test ./...` (skip if Postgres is down). Verified with GraphiQL,
-Postman (including error paths), and DBeaver.
+Or run it locally:
+
+```bash
+docker compose up -d postgres      # just the database
+go run ./cmd/seed                  # load sample data
+go run ./cmd/server                # start the API
+```
+
+Then open http://localhost:8080/ for the UI. GraphQL is at `/graphql` and a
+health check is at `/healthz`.
+
+Run the tests with `go test ./...` (they skip automatically if Postgres isn't
+running). I tested everything with GraphiQL, Postman (including the error
+cases), and DBeaver.
 
 ---
 
-I used AI tool while building this; I've reviewed the code and can walk through any of it.
+I used AI tools while building this. I've reviewed all the code and can walk
+through any part of it.
 
-Reviewed by: Ajay Varma 
+Reviewed by: Ajay Varma
