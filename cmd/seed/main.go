@@ -132,6 +132,9 @@ func seed(ctx context.Context, db *sql.DB) error {
 
 		for _, t := range u.Tasks {
 			var taskID int64
+			// Description is a Go string, so an unset one is "" (not NULL) and must
+			// be funneled through nullableString. DueDate is already a *time.Time, so
+			// an unset one is nil and maps to NULL on its own — hence the asymmetry.
 			err := tx.QueryRowContext(ctx,
 				`INSERT INTO tasks (user_id, title, description, status, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
 				userID, t.Title, nullableString(t.Description), t.Status, t.DueDate,

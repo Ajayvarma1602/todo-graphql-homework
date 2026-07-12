@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// ErrNotFound is returned when a lookup by ID matches no row.
+// ErrNotFound is returned when a lookup by ID matches no row
 var ErrNotFound = errors.New("not found")
 
 // User mirrors a row of the users table.
@@ -213,6 +213,8 @@ func (s *Store) CreateTask(ctx context.Context, in NewTask) (*Task, error) {
 	defer tx.Rollback()
 
 	var id int64
+	// status is intentionally omitted: the column has DEFAULT 'pending', which
+	// is the correct initial state for a freshly created task.
 	err = tx.QueryRowContext(ctx,
 		`INSERT INTO tasks (user_id, title, description, due_date)
 		 VALUES ($1, $2, $3, $4) RETURNING id`,
