@@ -207,3 +207,33 @@ main {
   color: var(--ally-highlighter);
   border: 1px solid rgba(219, 255, 130, 0.35);
 }
+
+
+/* Part 3: due date chip, shown next to the status pill when a task has one */
+.due-date {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(219, 255, 130, 0.12);
+  color: var(--ally-highlighter);
+  border: 1px solid rgba(219, 255, 130, 0.35);
+}
+
+/* Past due and not done */
+.due-date.overdue {
+  background: rgba(255, 99, 99, 0.15);
+  color: #ff6363;
+  border-color: rgba(255, 99, 99, 0.4);
+}
+
+/* Status filter dropdown */
+.status-filter {
+  margin: 0 0 16px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--ally-indigo, #1a1a2e);
+  color: inherit;
+  border: 1px solid rgba(203, 190, 255, 0.25);
+  font-size: 13px;
+}

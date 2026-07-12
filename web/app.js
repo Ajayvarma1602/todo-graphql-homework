@@ -4,15 +4,18 @@
 //   1. Add the new field you chose to the `QUERY` below.
 //   2. Render it inside renderUser / renderTask.
 
+
 const ENDPOINT = "http://localhost:8080/graphql";
 
+// $status is optional: when null/omitted, the API applies no filter
+// (flows down to store.TaskFilter{Status: nil} → no WHERE clause).
 const QUERY = `
-  query Board {
+  query Board($status: TaskStatus) {
     users {
       id
       name
       email
-      tasks {
+      tasks(status: $status) {
         id
         title
         status
@@ -64,9 +67,17 @@ function renderTask(task) {
   const meta = el("div", { class: "task-meta" }, [statusPill]);
 
   // Part 3: dueDate is nullable — render a chip only when a date exists,
-  // so tasks without one get nothing (not "due null").
+  // so tasks without one get nothing (not "due null"). Highlight overdue
+  // tasks (past due and not done); ISO dates compare correctly as strings.
   if (task.dueDate) {
-    meta.appendChild(el("span", { class: "due-date", text: `due ${task.dueDate}` }));
+    const today = new Date().toISOString().slice(0, 10);
+    const overdue = task.status !== "DONE" && task.dueDate < today;
+    meta.appendChild(
+      el("span", {
+        class: overdue ? "due-date overdue" : "due-date",
+        text: `due ${task.dueDate}`,
+      })
+    );
   }
 
   for (const tag of task.tags || []) {
@@ -99,8 +110,11 @@ async function main() {
   document.getElementById("endpoint").textContent = ENDPOINT;
   setStatus("Loading.");
 
+  const filter = document.getElementById("statusFilter").value;
+  const variables = filter ? { status: filter } : {};
+
   try {
-    const data = await gqlFetch(QUERY);
+    const data = await gqlFetch(QUERY, variables);
     const root = document.getElementById("app");
     root.innerHTML = "";
     if (!data.users || data.users.length === 0) {
@@ -114,5 +128,7 @@ async function main() {
     console.error(err);
   }
 }
+
+document.getElementById("statusFilter").addEventListener("change", main);
 
 main();
