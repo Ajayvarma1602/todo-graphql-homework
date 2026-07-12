@@ -59,6 +59,23 @@ func (s *Store) Users(ctx context.Context) ([]User, error) {
 	return users, rows.Err()
 }
 
+// UserByID returns a single user, or ErrNotFound if the id doesn't exist.
+func (s *Store) UserByID(ctx context.Context, id int64) (*User, error) {
+	var u User
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, email, name FROM users WHERE id = $1`, id,
+	).Scan(&u.ID, &u.Email, &u.Name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query user %d: %w", id, err)
+	}
+	return &u, nil
+}
+
+
+
 
 // TaskFilter narrows the Tasks query. Nil fields mean "no filter".
 type TaskFilter struct {
@@ -147,4 +164,97 @@ func (s *Store) attachTags(ctx context.Context, tasks []Task) error {
 		}
 	}
 	return rows.Err()
+}
+
+
+// TaskByID returns a single task (with tags) or ErrNotFound.
+func (s *Store) TaskByID(ctx context.Context, id int64) (*Task, error) {
+	var t Task
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, user_id, title, description, status, due_date FROM tasks WHERE id = $1`, id,
+	).Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.DueDate)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query task %d: %w", id, err)
+	}
+	one := []Task{t}
+	if err := s.attachTags(ctx, one); err != nil {
+		return nil, err
+	}
+	return &one[0], nil
+}
+
+// NewTask carries the inputs for CreateTask.
+type NewTask struct {
+	UserID      int64
+	Title       string
+	Description *string
+	DueDate     *time.Time
+	Tags        []string
+}
+
+// CreateTask inserts a task and its tags in one transaction and returns it.
+func (s *Store) CreateTask(ctx context.Context, in NewTask) (*Task, error) {
+	// Check the user exists first so the caller gets a clear error
+	// instead of a raw foreign-key violation.
+	if _, err := s.UserByID(ctx, in.UserID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, fmt.Errorf("user %d: %w", in.UserID, ErrNotFound)
+		}
+		return nil, err
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	var id int64
+	err = tx.QueryRowContext(ctx,
+		`INSERT INTO tasks (user_id, title, description, due_date)
+		 VALUES ($1, $2, $3, $4) RETURNING id`,
+		in.UserID, in.Title, in.Description, in.DueDate,
+	).Scan(&id)
+	if err != nil {
+		return nil, fmt.Errorf("insert task: %w", err)
+	}
+
+	seen := map[string]bool{}
+	for _, tag := range in.Tags {
+		if tag == "" || seen[tag] {
+			continue // skip empties and duplicates (task_tags PK is (task_id, tag))
+		}
+		seen[tag] = true
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO task_tags (task_id, tag) VALUES ($1, $2)`, id, tag,
+		); err != nil {
+			return nil, fmt.Errorf("insert tag %q: %w", tag, err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return s.TaskByID(ctx, id)
+}
+
+// UpdateTaskStatus sets a task's status (and bumps updated_at); ErrNotFound if missing.
+func (s *Store) UpdateTaskStatus(ctx context.Context, id int64, status string) (*Task, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE tasks SET status = $1, updated_at = now() WHERE id = $2`, status, id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update task %d: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
+		return nil, ErrNotFound
+	}
+	return s.TaskByID(ctx, id)
 }
