@@ -1,0 +1,14 @@
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+README.md
+NOTES.md
+INTERVIEWER_NOTES.md
+.claude/
+.vscode/
+.idea/
+*.md
+bin/
+dist/

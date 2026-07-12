@@ -18,5 +18,33 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot: populate the DB once Postgres is healthy, then exit.
+  seed:
+    build: .
+    image: todo-homework:latest
+    command: ["/app/seed"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://admin:todo@postgres:5432/homework?sslmode=disable"
+
+  # The GraphQL API + static UI on :8080, started after seeding completes.
+  api:
+    build: .
+    image: todo-homework:latest
+    restart: unless-stopped
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "postgres://admin:todo@postgres:5432/homework?sslmode=disable"
+      ADDR: ":8080"
+      # Set LOG_LEVEL=debug to surface per-resolver timing traces.
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    ports:
+      - "8080:8080"
+
 volumes:
   todo_pgdata:
