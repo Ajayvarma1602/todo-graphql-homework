@@ -195,3 +195,15 @@ main {
   border-radius: 3px;
   font-size: 11px;
 }
+
+
+/* Part 3: due date chip, shown next to the status pill when a task has one */
+.due-date {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(219, 255, 130, 0.12);
+  color: var(--ally-highlighter);
+  border: 1px solid rgba(219, 255, 130, 0.35);
+}

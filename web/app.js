@@ -16,6 +16,7 @@ const QUERY = `
         id
         title
         status
+        dueDate
         tags
       }
     }
@@ -61,6 +62,12 @@ function renderTask(task) {
   });
 
   const meta = el("div", { class: "task-meta" }, [statusPill]);
+
+  // Part 3: dueDate is nullable — render a chip only when a date exists,
+  // so tasks without one get nothing (not "due null").
+  if (task.dueDate) {
+    meta.appendChild(el("span", { class: "due-date", text: `due ${task.dueDate}` }));
+  }
 
   for (const tag of task.tags || []) {
     meta.appendChild(el("span", { class: "tag", text: tag }));
