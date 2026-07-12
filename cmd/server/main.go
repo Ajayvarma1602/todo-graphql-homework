@@ -28,7 +28,12 @@ import (
 const defaultDSN = "postgres://admin:todo@localhost:5432/homework?sslmode=disable"
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	// LOG_LEVEL=debug surfaces the per-resolver timing traces (see gql.tracer).
+	level := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		level = slog.LevelDebug
+	}
+	log := slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
 	if err := run(log); err != nil {
 		log.Error("fatal", slog.Any("err", err))
@@ -60,7 +65,7 @@ func run(log *slog.Logger) error {
 	}
 
 	st := store.New(db)
-	schema, err := gql.NewSchema(st)
+	schema, err := gql.NewSchema(st, log)
 	if err != nil {
 		return err
 	}

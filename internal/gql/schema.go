@@ -3,6 +3,7 @@ package gql
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -42,8 +43,9 @@ func parseID(v any) (int64, error) {
 	return id, nil
 }
 
-// NewSchema builds the executable schema, closing over the store.
-func NewSchema(s *store.Store) (graphql.Schema, error) {
+// NewSchema builds the executable schema, closing over the store. The logger
+// is used by the resolver-timing extension (see tracing.go).
+func NewSchema(s *store.Store, log *slog.Logger) (graphql.Schema, error) {
 	taskStatusEnum := graphql.NewEnum(graphql.EnumConfig{
 		Name: "TaskStatus",
 		Values: graphql.EnumValueConfigMap{
@@ -275,6 +277,8 @@ mutation := graphql.NewObject(graphql.ObjectConfig{
 					if err != nil {
 						return nil, err
 					}
+					// The TaskStatus enum already rejects anything outside
+					// PENDING/IN_PROGRESS/DONE, so statusToDB is guaranteed a valid key.
 					status, _ := p.Args["status"].(string)
 					t, err := s.UpdateTaskStatus(p.Context, id, statusToDB[status])
 					if err == store.ErrNotFound {
@@ -290,5 +294,9 @@ mutation := graphql.NewObject(graphql.ObjectConfig{
 	})
 	
 
-	return graphql.NewSchema(graphql.SchemaConfig{Query: query, Mutation: mutation})
+	return graphql.NewSchema(graphql.SchemaConfig{
+		Query:      query,
+		Mutation:   mutation,
+		Extensions: []graphql.Extension{&tracer{log: log}},
+	})
 }
