@@ -111,38 +111,60 @@ If Postgres isn't reachable the tests **skip themselves** instead of failing, so
   change its status, and confirm duplicate tags are removed (the test cleans up
   after itself, so it doesn't leave rows behind)
 
-### Testing the API by hand
+### Testing the API in Postman
 
-With the app running, you can send requests to `http://localhost:8080/graphql`
-from Postman, GraphiQL, or curl. A few to try:
+With the app running, set up one request in Postman and reuse it for everything:
 
-```bash
-# list users and their tasks
-curl -s -X POST http://localhost:8080/graphql -H 'content-type: application/json' \
-  -d '{"query":"{ users { name tasks { title status dueDate tags } } }"}'
+- **Method:** `POST`
+- **URL:** `http://localhost:8080/graphql`
+- **Headers:** `Content-Type: application/json`
+- **Body:** choose **raw** and **JSON**, then paste one of the samples below.
 
-# filter tasks by status
-curl -s -X POST http://localhost:8080/graphql -H 'content-type: application/json' \
-  -d '{"query":"{ tasks(status: DONE) { title status } }"}'
+(GraphQL always uses POST with a JSON body — the query goes inside a `"query"`
+field.)
 
-# create a task
-curl -s -X POST http://localhost:8080/graphql -H 'content-type: application/json' \
-  -d '{"query":"mutation { createTask(userId:\"1\", title:\"New task\", dueDate:\"2026-09-01\", tags:[\"demo\"]) { id title status } }"}'
+**List users and their tasks**
+
+```json
+{ "query": "{ users { name tasks { title status dueDate tags } } }" }
 ```
 
-The error handling is easy to check too — an invalid id, a missing user, or a
-bad date all return a clear error message and the server keeps running. I tested
-all of this with GraphiQL, Postman (including the error cases), and DBeaver.
+**Filter tasks by status** (values: `PENDING`, `IN_PROGRESS`, `DONE`)
 
-### If you get "connection refused"
+```json
+{ "query": "{ tasks(status: DONE) { title status } }" }
+```
 
-- **Postgres wasn't ready yet.** Use the `--wait` flag shown above, or just use
-  the Docker-only command — it handles the waiting for you.
-- **Something else is already using port 5432** (often a Postgres you already
-  have running locally). Stop it first, or change the host port in
-  `docker-compose.yml` (e.g. `"5433:5432"`) and point `DATABASE_URL` at the new
-  port: `export DATABASE_URL="postgres://admin:todo@localhost:5433/homework?sslmode=disable"`.
-- **Make sure Docker is actually running** before any of the commands above.
+**Get one task with its owner and tags**
+
+```json
+{ "query": "{ task(id: \"1\") { title dueDate tags user { name } } }" }
+```
+
+**Create a task**
+
+```json
+{ "query": "mutation { createTask(userId: \"1\", title: \"New task\", dueDate: \"2026-09-01\", tags: [\"demo\"]) { id title status dueDate tags } }" }
+```
+
+**Update a task's status**
+
+```json
+{ "query": "mutation { updateTaskStatus(id: \"1\", status: DONE) { id status } }" }
+```
+
+**Error handling** — try an invalid id and you'll get a clear message back while
+the server keeps running (a valid-but-missing user just returns `null`):
+
+```json
+{ "query": "{ user(id: \"not-a-number\") { name } }" }
+```
+
+Note: GraphQL returns HTTP `200` even for these errors — look at the `errors`
+field in the response body, not the status code.
+
+I tested all of this with Postman (including the error cases), plus GraphiQL and
+DBeaver.
 
 ---
 
