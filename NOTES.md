@@ -87,9 +87,52 @@ go run ./cmd/server                    # start the API
 Then open http://localhost:8080/ for the UI. GraphQL is at `/graphql` and a
 health check is at `/healthz`.
 
-Run the tests with `go test ./...` (they skip automatically if Postgres isn't
-running). I tested everything with GraphiQL, Postman (including the error
-cases), and DBeaver.
+## 6. How to test it
+
+### Automated tests
+
+The tests live in `internal/store/store_test.go` and run against a live Postgres.
+Make sure the database is up and seeded first, then run them:
+
+```bash
+docker compose up -d --wait postgres   # database must be running
+go run ./cmd/seed                       # and seeded
+go test ./...                           # run the tests
+```
+
+If Postgres isn't reachable the tests **skip themselves** instead of failing, so
+`go test ./...` is always safe to run. What they cover:
+
+- `TestUsers` — every user comes back with all fields filled in
+- `TestUserByID` — looking up a real user works; a missing id returns `ErrNotFound`
+- `TestTasksFilterByStatus` — the status filter only returns matching tasks, and
+  tags are never null
+- `TestCreateAndUpdateTask` — the full write path: create a task, read it back,
+  change its status, and confirm duplicate tags are removed (the test cleans up
+  after itself, so it doesn't leave rows behind)
+
+### Testing the API by hand
+
+With the app running, you can send requests to `http://localhost:8080/graphql`
+from Postman, GraphiQL, or curl. A few to try:
+
+```bash
+# list users and their tasks
+curl -s -X POST http://localhost:8080/graphql -H 'content-type: application/json' \
+  -d '{"query":"{ users { name tasks { title status dueDate tags } } }"}'
+
+# filter tasks by status
+curl -s -X POST http://localhost:8080/graphql -H 'content-type: application/json' \
+  -d '{"query":"{ tasks(status: DONE) { title status } }"}'
+
+# create a task
+curl -s -X POST http://localhost:8080/graphql -H 'content-type: application/json' \
+  -d '{"query":"mutation { createTask(userId:\"1\", title:\"New task\", dueDate:\"2026-09-01\", tags:[\"demo\"]) { id title status } }"}'
+```
+
+The error handling is easy to check too — an invalid id, a missing user, or a
+bad date all return a clear error message and the server keeps running. I tested
+all of this with GraphiQL, Postman (including the error cases), and DBeaver.
 
 ### If you get "connection refused"
 
