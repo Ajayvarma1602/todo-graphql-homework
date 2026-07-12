@@ -66,18 +66,22 @@ overdue tasks in red.
 
 ## 5. How to run it
 
-Everything in Docker (easiest):
+**Recommended — everything in Docker.** This starts the database, waits for it
+to be ready, seeds it, then starts the API. Nothing to install but Docker:
 
 ```bash
-docker compose up --build          # starts Postgres, seeds it, then the API on :8080
+docker compose up --build          # Postgres → seed → API on :8080
 ```
 
-Or run it locally:
+**Or run the app locally** (needs Go installed). The important part is the
+`--wait` flag: it makes the command block until Postgres is actually ready to
+accept connections. Without it, the next command can run too early and fail with
+"connection refused":
 
 ```bash
-docker compose up -d postgres      # just the database
-go run ./cmd/seed                  # load sample data
-go run ./cmd/server                # start the API
+docker compose up -d --wait postgres   # start the database AND wait until it's ready
+go run ./cmd/seed                      # load sample data
+go run ./cmd/server                    # start the API
 ```
 
 Then open http://localhost:8080/ for the UI. GraphQL is at `/graphql` and a
@@ -86,6 +90,16 @@ health check is at `/healthz`.
 Run the tests with `go test ./...` (they skip automatically if Postgres isn't
 running). I tested everything with GraphiQL, Postman (including the error
 cases), and DBeaver.
+
+### If you get "connection refused"
+
+- **Postgres wasn't ready yet.** Use the `--wait` flag shown above, or just use
+  the Docker-only command — it handles the waiting for you.
+- **Something else is already using port 5432** (often a Postgres you already
+  have running locally). Stop it first, or change the host port in
+  `docker-compose.yml` (e.g. `"5433:5432"`) and point `DATABASE_URL` at the new
+  port: `export DATABASE_URL="postgres://admin:todo@localhost:5433/homework?sslmode=disable"`.
+- **Make sure Docker is actually running** before any of the commands above.
 
 ---
 
